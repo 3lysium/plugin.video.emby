@@ -56,7 +56,7 @@ class DatabaseConn(object):
         
         """
         database_file can be custom: emby, texture, music, video, custom like :memory: or path
-        commit_mode is set to None for isolation_level. See python documentation.
+        commit_mode is set to None to autocommit (isolation_level). See python documentation.
         """
         global log
         log = utils.Logging('Database').log
@@ -92,7 +92,7 @@ class DatabaseConn(object):
 
         if exc_type is not None:
             # Errors were raised in the with statement
-            log("Type: %s Value: %s Traceback: %s" % (exc_type, exc_val, exc_tb))
+            log("Type: %s Value: %s Traceback: %s" % (exc_type, exc_val, exc_tb), -1)
 
 def dbquery(query, connection=None, conn_type=None, *args):
     
