@@ -47,8 +47,13 @@ class Logging(object):
 
     def log(self, msg, level=1):
 
+        extra = ""
+        if level == -1:
+            # Error mode
+            extra = "::ERROR"
+
         if self._getLogLevel(level):
-            self._printMsg("EMBY %s" % self.title, msg) 
+            self._printMsg("EMBY %s%s" % (self.title, extra), msg)
 
 # Initiate class for utils.py document logging
 log = Logging('Utils').log
@@ -76,8 +81,7 @@ def settings(setting, value=None):
 
 def language(string_id):
     # Central string retrieval - unicode
-    string = xbmcaddon.Addon(id='plugin.video.emby').getLocalizedString(string_id) 
-    return string
+    return xbmcaddon.Addon(id='plugin.video.emby').getLocalizedString(string_id)
 
 #################################################################################################
 # Database related methods
@@ -93,7 +97,10 @@ def kodiSQL(media_type="video"):
     else:
         dbPath = getKodiVideoDBPath()
 
-    connection = sqlite3.connect(dbPath, timeout=20)
+    if settings('dblock') == "true":
+        connection = sqlite3.connect(dbPath, isolation_level=None, timeout=20)
+    else:
+        connection = sqlite3.connect(dbPath, timeout=20)
     return connection
 
 def getKodiVideoDBPath():
