@@ -4,6 +4,7 @@
 
 import sqlite3
 import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta, time
 
 import xbmc
@@ -20,6 +21,7 @@ import kodidb_functions as kodidb
 import read_embyserver as embyserver
 import userclient
 import videonodes
+from database import DatabaseConn as dbconn, dbquery
 from utils import Logging, window, settings, language as lang
 
 ##################################################################################################
@@ -211,20 +213,25 @@ class LibrarySync(threading.Thread):
         # Add sources
         utils.sourcesXML()
 
+        with dbconn('emby') as emby_conn:
+            
+            queries = [
+                
+                """CREATE TABLE IF NOT EXISTS emby(
+                    emby_id TEXT UNIQUE, media_folder TEXT, emby_type TEXT, media_type TEXT,
+                    kodi_id INTEGER, kodi_fileid INTEGER, kodi_pathid INTEGER, parent_id INTEGER,
+                    checksum INTEGER)""",
+
+                """CREATE TABLE IF NOT EXISTS view(
+                    view_id TEXT UNIQUE, view_name TEXT, media_type TEXT, kodi_tagid INTEGER)""",
+
+                "CREATE TABLE IF NOT EXISTS version(idVersion TEXT)"
+            ]
+            for query in queries:
+                dbquery(query, emby_conn)
+
         embyconn = utils.kodiSQL('emby')
         embycursor = embyconn.cursor()
-        # Create the tables for the emby database
-        # emby, view, version
-        embycursor.execute(
-            """CREATE TABLE IF NOT EXISTS emby(
-            emby_id TEXT UNIQUE, media_folder TEXT, emby_type TEXT, media_type TEXT, kodi_id INTEGER,
-            kodi_fileid INTEGER, kodi_pathid INTEGER, parent_id INTEGER, checksum INTEGER)""")
-        embycursor.execute(
-            """CREATE TABLE IF NOT EXISTS view(
-            view_id TEXT UNIQUE, view_name TEXT, media_type TEXT, kodi_tagid INTEGER)""")
-        embycursor.execute("CREATE TABLE IF NOT EXISTS version(idVersion TEXT)")
-        embyconn.commit()
-
         # content sync: movies, tvshows, musicvideos, music
         kodiconn = utils.kodiSQL('video')
         kodicursor = kodiconn.cursor()
@@ -237,47 +244,74 @@ class LibrarySync(threading.Thread):
             message = "Initial sync"
             window('emby_initialScan', value="true")
 
+        #with utils.DialogProgressBG(message) as dialog:
         pDialog = self.progressDialog("%s" % message)
         starttotal = datetime.now()
 
         # Set views
         self.maintainViews(embycursor, kodicursor)
         embyconn.commit()
+        kodicursor.close()
+        embycursor.close()
 
         # Sync video library
-        process = {
+        process = OrderedDict([
 
-            'movies': self.movies,
-            'musicvideos': self.musicvideos,
-            'tvshows': self.tvshows
-        }
-        for itemtype in process:
-            startTime = datetime.now()
-            completed = process[itemtype](embycursor, kodicursor, pDialog)
-            if not completed:
+            ('movies', self.movies),
+            ('tvshows', self.tvshows),
+            ('musicvideos', self.musicvideos),
+            ('music', self.music)
+        ])
+        for media in process:
+
+            if media == "music":
+                if music_enabled:
+                    if not self._process_media("music", process[media], pDialog):
+                        xbmc.executebuiltin('InhibitIdleShutdown(false)')
+                        utils.setScreensaver(value=screensaver)
+                        window('emby_dbScan', clear=True)
+                        if pDialog:
+                            pDialog.close()
+                        return False
+                else:
+                    continue
+
+            if not self._process_media("video", process[media], pDialog):
+                xbmc.executebuiltin('InhibitIdleShutdown(false)')
+                utils.setScreensaver(value=screensaver)
+                window('emby_dbScan', clear=True)
+                if pDialog:
+                    pDialog.close()
+                return False
+
+        if pDialog:
+            pDialog.close()
+
+
+            '''else:
+                self.dbCommit(kodiconn)
+                embyconn.commit()
+                elapsedTime = datetime.now() - startTime
+                log("SyncDatabase (finished %s in: %s)"
+                    % (itemtype, str(elapsedTime).split('.')[0]), 1)'''
+        '''else:
+            # Close the Kodi cursor
+            kodicursor.close()'''
+
+        # sync music
+        if music_enabled:
+
+            if not self.process_media("music", self.music, pDialog):
                 xbmc.executebuiltin('InhibitIdleShutdown(false)')
                 utils.setScreensaver(value=screensaver)
                 window('emby_dbScan', clear=True)
                 if pDialog:
                     pDialog.close()
 
-                embycursor.close()
-                kodicursor.close()
                 return False
-            else:
-                self.dbCommit(kodiconn)
-                embyconn.commit()
-                elapsedTime = datetime.now() - startTime
-                log("SyncDatabase (finished %s in: %s)"
-                    % (itemtype, str(elapsedTime).split('.')[0]), 1)
-        else:
-            # Close the Kodi cursor
-            kodicursor.close()
 
-        # sync music
-        if music_enabled:
 
-            musicconn = utils.kodiSQL('music')
+            '''musicconn = utils.kodiSQL('music')
             musiccursor = musicconn.cursor()
 
             startTime = datetime.now()
@@ -298,12 +332,11 @@ class LibrarySync(threading.Thread):
                 elapsedTime = datetime.now() - startTime
                 log("SyncDatabase (finished music in: %s)"
                     % (str(elapsedTime).split('.')[0]), 1)
-            musiccursor.close()
+            musiccursor.close()'''
 
         if pDialog:
             pDialog.close()
 
-        embycursor.close()
 
         settings('SyncInstallRunDone', value="true")
         settings("dbCreatedWithVersion", self.clientInfo.getVersion())
@@ -325,6 +358,21 @@ class LibrarySync(threading.Thread):
                     
         return True
 
+    def _process_media(self, db_type, media_func, dialog=None):
+
+        with dbconn('emby') as emby_conn:
+            with dbconn(db_type) as conn:
+
+                emby_c = emby_conn.cursor()
+                kodi_c = conn.cursor()
+
+                start_time = datetime.now()
+                if not media_func(emby_c, kodi_c, dialog):
+                    return False
+
+                elapsed_time = datetime.now() - start_time
+                log("Processed in: %s" % str(elapsed_time).split('.')[0], 1)
+                return True
 
     def refreshViews(self):
 
