@@ -50,16 +50,14 @@ def music_database():
 
 
 class DatabaseConn(object):
-    # To be called as context manager - with statement
+    # To be called as context manager - i.e. with DatabaseConn() as dbconn
 
-    def __init__(self, database_file="video", commit_mode=None):
-        
+    def __init__(self, database_file="video", commit_mode=""):
         """
         database_file can be custom: emby, texture, music, video, custom like :memory: or path
-        commit_mode is set to None to autocommit (isolation_level). See python documentation.
+        commit_mode set to None to autocommit (isolation_level). See python documentation.
         """
-        global log
-        log = utils.Logging('Database').log
+        self.log = utils.Logging('Database').log
 
         self.db_file = database_file
         self.commit_mode = commit_mode
@@ -67,11 +65,9 @@ class DatabaseConn(object):
     def __enter__(self):
         # Open the connection
         self.path = self._SQL(self.db_file)
-        log("Opening database: %s" % self.path, 1)
-
+        self.log("Opening database: %s" % self.path, 1)
         self.conn = sqlite3.connect(self.path, isolation_level=self.commit_mode, timeout=20)
-        with self.conn as conn:
-            return conn
+        return self.conn
 
     def _SQL(self, media_type):
 
@@ -88,11 +84,16 @@ class DatabaseConn(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # Close the connection
-        self.conn.close()
-
         if exc_type is not None:
             # Errors were raised in the with statement
-            log("Type: %s Value: %s Traceback: %s" % (exc_type, exc_val, exc_tb), -1)
+            self.log("Type: %s Value: %s Traceback: %s" % (exc_type, exc_val, exc_tb), -1)
+            self.conn.rollback()
+
+        elif self.commit_mode is not None:
+            self.log("Commit: %s" % self.path, 1)
+            self.conn.commit()
+
+        self.conn.close()
 
 def dbquery(query, connection=None, conn_type=None, *args):
     
