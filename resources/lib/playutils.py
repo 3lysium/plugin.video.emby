@@ -22,9 +22,10 @@ log = logging.getLogger("EMBY."+__name__)
 class PlayUtils():
     
     
-    def __init__(self, item):
+    def __init__(self, item, force_transcode=False):
 
         self.item = item
+        self.force_transcode = force_transcode
         self.clientInfo = clientinfo.ClientInfo()
 
         self.userid = window('emby_currUser')
@@ -97,6 +98,9 @@ class PlayUtils():
         transcodeH265 = settings('transcodeH265')
         videoprofiles = [x['Profile'] for x in self.item['MediaSources'][0]['MediaStreams'] if 'Profile' in x]
         transcodeHi10P = settings('transcodeHi10P')        
+
+        if self.force_transcode:
+            return False
 
         if transcodeHi10P == "true" and "H264" in videotrack and "High 10" in videoprofiles:
             return False   
@@ -189,6 +193,9 @@ class PlayUtils():
         videoprofiles = [x['Profile'] for x in self.item['MediaSources'][0]['MediaStreams'] if 'Profile' in x]
         transcodeHi10P = settings('transcodeHi10P')        
 
+        if self.force_transcode:
+            return False
+            
         if transcodeHi10P == "true" and "H264" in videotrack and "High 10" in videoprofiles:
             return False   
 

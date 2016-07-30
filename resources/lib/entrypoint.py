@@ -34,11 +34,11 @@ log = logging.getLogger("EMBY."+__name__)
 #################################################################################################
 
 
-def doPlayback(itemId, dbId):
+def doPlayback(itemId, dbId, force_transcode=False):
 
     emby = embyserver.Read_EmbyServer()
     item = emby.getItem(itemId)
-    pbutils.PlaybackUtils(item).play(itemId, dbId)
+    pbutils.PlaybackUtils(item).play(itemId, dbId, force_transcode)
 
 ##### DO RESET AUTH #####
 def resetAuth():

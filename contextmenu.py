@@ -88,6 +88,9 @@ if __name__ == '__main__':
         
         options = []
 
+        if itemType in ("movie", "episode"):
+            options.append("Play Transcoded")
+
         if favourite:
             # Remove from emby favourites
             options.append(lang(30406))
@@ -111,7 +114,11 @@ if __name__ == '__main__':
         if resp > -1:
             selected = options[resp]
 
-            if selected == lang(30410):
+            if selected == "Play Transcoded":
+                from entrypoint import doPlayback
+                doPlayback(itemId, None, True)
+
+            elif selected == lang(30410):
                 # Refresh item
                 emby.refreshItem(itemId)
             elif selected == lang(30405):

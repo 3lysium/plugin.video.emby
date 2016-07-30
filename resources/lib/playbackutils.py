@@ -44,16 +44,22 @@ class PlaybackUtils():
         self.pl = playlist.Playlist()
 
 
-    def play(self, itemid, dbid=None):
+    def play(self, itemid, dbid=None, force_transcode=False):
 
         listitem = xbmcgui.ListItem()
-        playutils = putils.PlayUtils(self.item)
+        playutils = putils.PlayUtils(self.item, force_transcode)
 
         log.info("Play called.")
         playurl = playutils.getPlayUrl()
         if not playurl:
             return xbmcplugin.setResolvedUrl(int(sys.argv[1]), False, listitem)
 
+        if force_transcode:
+            playurl = playutils.audioSubsPref(playurl, listitem)
+            self.setProperties(playurl, listitem)
+            self.setListItem(listitem)
+            window('emby_%s.playmethod' % playurl, value="Transcode")
+            return xbmc.Player().play(playurl, listitem=listitem)
         if dbid is None:
             # Item is not in Kodi database
             listitem.setPath(playurl)
